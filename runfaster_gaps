@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+import subprocess
+import os
+import argparse
+import sys
+
+revision = 190326 # update this number every time I make changes
+parser = argparse.ArgumentParser(description='runfaster_gaps: basically run_gaps on multiple threads\n  by Wayland Yeung (revision %s)\n\nUSAGE: runfaster_gaps <input> -s -t -profile\n\nRequires the following programs to be installed:\n  run_gaps (obviously)\n  gnu parallel\n  fasta-splitter.pl\n' % revision, usage=argparse.SUPPRESS, formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-s', type=int, help="number of times to split the input", default=1)
+parser.add_argument('-t', type=int, help="number of threads", default=1)
+parser.add_argument('-c', type=bool, help="keep consensus sequence", default=False)
+parser.add_argument('-profile', default="/auto/share/Data/profiles/ePKf",
+                    help="run_gaps profile; default is ePKf (share drive)")
+
+args, unk = parser.parse_known_args()
+if len(unk) != 1:
+    sys.exit('lol no')
+input_fasta = unk[0]
+
+n_split          = args.s
+n_threads        = args.t
+profile          = args.profile
+onecsq           = args.c
+
+cmd_rungaps    = "run_gaps"
+cmd_fastasplit = "fasta-splitter.pl"
+cmd_parallel   = "parallel"
+
+# split the file
+subprocess.call(('%s %s --n-parts %s' % (cmd_fastasplit, input_fasta, n_split)).split())
+   
+# determine the "part" filenames
+if '.' in input_fasta.split('/')[-1]:
+    si = input_fasta.split('.')
+    fasta_parts = ['.'.join(['.'.join(si[:-1]), 'part-'+str(n).zfill(len(str(n_split))) ,si[-1]]) for n in range(1, n_split+1)]
+else:
+    fasta_parts = ['.'.join([input_fasta, 'part-'+str(n).zfill(len(str(n_split)))]) for n in range(1, n_split+1)]
+if '/' in input_fasta:
+    for part in fasta_parts:
+        part = os.path.basename(part)
+        os.rename(part, os.path.dirname(input_fasta)+'/'+part)
+
+# make parallel command
+with open(input_fasta+'.cmd.temp', 'w') as w:
+    for f in fasta_parts:
+        w.write('%s %s %s -O\n' % (cmd_rungaps, profile, f))
+
+# parallel run_gaps
+with open(input_fasta+'.rgp.cmd', 'w') as w:
+    w.write('parallel -u -j %s < %s' % (n_threads, input_fasta+'.cmd.temp'))
+subprocess.call(["bash", input_fasta+'.rgp.cmd'])
+os.remove(input_fasta+'.rgp.cmd')
+os.remove(input_fasta+'.cmd.temp')
+
+# identify created files
+p_cma, p_seq, current_dir = [], [], os.listdir('.')
+for p in fasta_parts:
+    for f in current_dir:
+        if p in f:
+            if f == p:
+                os.remove(p)
+            elif f[-4:] == '.cma':
+                p_cma.append(f)
+            elif f[-4:] == '.seq':
+                p_seq.append(f)
+assert len(set([len(f) for f in fasta_parts])) == 1
+head, combo = len(fasta_parts[0]), {}
+for tail in set([p[head:] for p in p_cma]):
+    combo[input_fasta+tail] = [p for p in p_cma if tail == p[-len(tail):]]
+for tail in set([p[head:] for p in p_seq]):
+    combo[input_fasta+tail] = [p for p in p_seq if tail == p[-len(tail):]]
+
+# stack the files
+for key in sorted(combo):
+    print 'STACKING   : %s' % key
+    with open(key, 'w') as w:
+        for f in combo[key]:
+            with open(f, 'r') as r:
+                for l in r:
+                    w.write(l)
+            os.remove(f)
+
+# reformat the stacks
+for key in sorted([key for key in combo if key[-4:]==".cma"]):
+    print 'RESTACKING : %s' % key
+    skip = 0
+    with open(key, 'r') as r:
+        counts = 1
+        for l in r:
+            if l[0] == "$" and "$1=" not in l:
+                counts +=1
+    with open(key+'.temp', 'w') as w:
+        with open(key, 'r') as r:
+            for n, l in enumerate(r):
+                if l[:3]=='$1=' and not onecsq:
+                    skip = 3
+                if skip != 0:
+                    skip -= 1
+                    continue
+                if key[-7:-4]!='aln' and l[:3]=='$1=' and onecsq:
+                    onecsq = False
+                if n == 0:
+                    w.write(l[:[n for n, a in enumerate(l) if a=="("][1]+1]+str(counts)+l[[n for n, a in enumerate(l) if a==")"][1]:])
+                elif n == 1:
+                    w.write(l+'\n')
+                elif l[0] in ['$','>','{','\n']:
+                    w.write(l)
+        w.write('\n_0].')
+    os.rename(key+'.temp', key)
+
