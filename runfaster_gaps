@@ -28,7 +28,7 @@ cmd_parallel   = "parallel"
 
 # split the file
 subprocess.call(('%s %s --n-parts %s' % (cmd_fastasplit, input_fasta, n_split)).split())
-   
+
 # determine the "part" filenames
 if '.' in input_fasta.split('/')[-1]:
     si = input_fasta.split('.')
@@ -85,7 +85,7 @@ for key in sorted([key for key in combo if key[-4:]==".cma"]):
     print 'RESTACKING : %s' % key
     skip = 0
     with open(key, 'r') as r:
-        counts = 1
+        counts = 1 if onecsq else 0
         for l in r:
             if l[0] == "$" and "$1=" not in l:
                 counts +=1
@@ -107,4 +107,3 @@ for key in sorted([key for key in combo if key[-4:]==".cma"]):
                     w.write(l)
         w.write('\n_0].')
     os.rename(key+'.temp', key)
-
