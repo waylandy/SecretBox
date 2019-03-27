@@ -4,11 +4,12 @@ import os
 import argparse
 import sys
 
-revision = 190326 # update this number every time I make changes
+revision = 190327 # update this number every time I make changes
 parser = argparse.ArgumentParser(description='runfaster_gaps: basically run_gaps on multiple threads\n  by Wayland Yeung (revision %s)\n\nUSAGE: runfaster_gaps <input> -s -t -profile\n\nRequires the following programs to be installed:\n  run_gaps (obviously)\n  gnu parallel\n  fasta-splitter.pl\n' % revision, usage=argparse.SUPPRESS, formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-s', type=int, help="number of times to split the input", default=1)
 parser.add_argument('-t', type=int, help="number of threads", default=1)
-parser.add_argument('-c', type=bool, help="keep consensus sequence", default=False)
+parser.add_argument('-c', action='store_true',  help="keep consensus sequence")
+parser.add_argument('-d', action='store_false', help="delete intermediate files (always recommended)")
 parser.add_argument('-profile', default="/auto/share/Data/profiles/ePKf",
                     help="run_gaps profile; default is ePKf (share drive)")
 
@@ -21,6 +22,7 @@ n_split          = args.s
 n_threads        = args.t
 profile          = args.profile
 onecsq           = args.c
+clean            = args.d
 
 cmd_rungaps    = "run_gaps"
 cmd_fastasplit = "fasta-splitter.pl"
@@ -78,7 +80,8 @@ for key in sorted(combo):
             with open(f, 'r') as r:
                 for l in r:
                     w.write(l)
-            os.remove(f)
+            if clean:
+                os.remove(f)
 
 # reformat the stacks
 for key in sorted([key for key in combo if key[-4:]==".cma"]):
@@ -89,10 +92,13 @@ for key in sorted([key for key in combo if key[-4:]==".cma"]):
         for l in r:
             if l[0] == "$" and "$1=" not in l:
                 counts +=1
+            elif key[-7:-4]=='aln' and "$1=" in l:
+                counts +=1
+
     with open(key+'.temp', 'w') as w:
         with open(key, 'r') as r:
             for n, l in enumerate(r):
-                if l[:3]=='$1=' and not onecsq:
+                if l[:3]=='$1=' and not onecsq and key[-7:-4]!='aln':
                     skip = 3
                 if skip != 0:
                     skip -= 1
