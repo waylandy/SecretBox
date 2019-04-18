@@ -1,3 +1,5 @@
+## An assortment of standalone scripts
+
 ### runfaster_gaps
 parallelized version of run_gaps \
 requires the following to be in your paths:
