@@ -1,6 +1,14 @@
 
 ![logo](logo.png)
 
+&nbsp;
+
+&nbsp;
+
+# Description:
+---
+This is a collection of scripts used by the Kannan Lab. There may be bugs, so use at your own risk.
+
 ### runfaster_gaps
 ---
 parallelized version of run_gaps \
