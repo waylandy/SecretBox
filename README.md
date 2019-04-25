@@ -1,6 +1,8 @@
-## An assortment of standalone scripts
+
+![logo](logo.png)
 
 ### runfaster_gaps
+---
 parallelized version of run_gaps \
 requires the following to be in your paths:
 * __run_gaps__ (Neuwald's program)
@@ -8,5 +10,7 @@ requires the following to be in your paths:
 * __parallel__ (GNU parallel)
 
 ### wetwilly
+---
 finds water contacts in pdb
+requires Bio.PDB
 
