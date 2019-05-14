@@ -4,15 +4,15 @@ import os
 import argparse
 import sys
 
-revision = 190502 # update this number every time I make changes
+revision = 190503 # update this number every time I make changes
 description = """
-runfaster_gaps: basically run_gaps on multiple threads
+runfaster_gaps: basically mapgaps on multiple threads
   by Wayland Yeung (revision %s)
 
-USAGE: runfaster_gaps <input> -s -t -profile
+USAGE: mapfaster_gaps <input> -s -t -profile
 
 Requires the following programs to be in your paths:
-  run_gaps
+  mapgaps
   gnu parallel
   fasta-splitter.pl
 """ % revision
@@ -20,6 +20,7 @@ parser = argparse.ArgumentParser(description=description, usage=argparse.SUPPRES
 parser.add_argument('-s', type=int, help="number of times to split the input", default=1)
 parser.add_argument('-t', type=int, help="number of threads", default=1)
 parser.add_argument('-f', type=int, help="length of flanking regions to keep", default=10)
+parser.add_argument('-n', type=float, help="sense", default=0.9)
 parser.add_argument('-q', action='store_true',  help="split the input, then quit")
 # parser.add_argument('-c', action='store_true',  help="keep consensus sequence")
 # parser.add_argument('-d', action='store_false', help="delete intermediate files (always recommended)")
@@ -34,6 +35,7 @@ input_fasta = unk[0]
 n_split          = args.s
 n_threads        = args.t
 flanking         = args.f
+sense            = args.n
 splitnquit       = args.q
 # onecsq           = args.c
 # clean            = args.d
@@ -119,7 +121,7 @@ parts = enumerate_parts(input_fasta, n_split)
 # write all commands
 with open(input_fasta+'.cmd.temp', 'w') as w:
     for p in parts:
-        w.write('%s %s %s -O -I=%s:%s -sense=0.9\n' % (cmd_rungaps, profile, p, flanking, flanking))
+        w.write('%s %s %s -O -I=%s:%s -sense=%s\n' % (cmd_rungaps, profile, p, flanking, flanking, sense))
 
 # parallel run the commands
 with open(input_fasta+'.rgp.cmd', 'w') as w:
