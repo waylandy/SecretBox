@@ -21,3 +21,7 @@ def read_xvg(xvg):
     r.close()
     return x,y
 
+
+def moving_average(x, w=3):
+    s=(w*2)+1
+    return [sum(x[n-w if n>w else 0:n+w+1])/s for n, xi in enumerate(x)]
