@@ -4,7 +4,7 @@ import os
 import argparse
 import sys
 
-revision = '190620-AV'
+revision = '190620-AV-WY'
 
 description = """
 mapfaster [ revision %s ]
@@ -19,8 +19,6 @@ USAGE: mapfaster <input> -s <int> -t <int> -profile <str>
                          -f <int> -n <float> -q <bool>
 
 Requires the following programs to be in your paths:
-  mapgaps           : igs.umaryland.edu/labs/neuwald/software/mapgaps/
-  fasta-splitter.pl : kirill-kryukov.com/study/tools/fasta-splitter/
   gnu parallel      : gnu.org/software/parallel/
 
 """ % revision
@@ -37,15 +35,6 @@ parser.add_argument('-profile', default="/auto/Data/profiles/ePKf",
                     help="run_gaps profile; default is ePKf (share drive)")
 
 args, unk = parser.parse_known_args()
-if len(unk) == 0:
-    sys.stderr.write("No input sequence file found.\n")
-    sys.stderr.write("\nCheck the help section with [ mapfaster -h ].\n")
-    sys.exit()
-elif len(unk) > 1:
-    sys.stderr.write("Please provide only a single sequence file or check if flags are included correctly.\n")
-    sys.stderr.write("\nCheck the help section with [ mapfaster -h ].\n")
-    sys.exit()
-input_fasta = unk[0]
 
 n_split          = args.s
 n_threads        = args.t
@@ -56,9 +45,35 @@ splitnquit       = args.q
 # clean            = args.d
 profile          = args.profile
 
-cmd_rungaps    = "mapgaps"
-cmd_fastasplit = "fasta-splitter.pl"
+here = os.path.dirname(os.path.realpath(__file__))
+cmd_rungaps    = here+"/ext/mapgaps"           # igs.umaryland.edu/labs/neuwald/software/mapgaps/
+cmd_fastasplit = here+"/ext/fasta-splitter.pl" # kirill-kryukov.com/study/tools/fasta-splitter/
 cmd_parallel   = "parallel"
+
+def _checks():
+    lu = len(unk)
+    pens = ['.cma','.dft','.tpl','.mpa']
+    if lu == 0:
+        sys.stderr.write("No input sequence file provided\n")
+        sys.stderr.write('Check usage: "mapfaster -h"\n')
+        sys.exit()
+    elif lu > 1:
+        sys.stderr.write("Provide only a single sequence file\n")
+        sys.stderr.write('Check usage: "mapfaster -h"\n')
+        sys.exit()
+    elif not os.path.isfile(unk[0]):
+        sys.stderr.write("File does not exist: %s\n" % unk[0])
+        sys.exit()
+    stemmed = lambda x: all(os.path.isfile(x+p) for p in pens)
+    if stemmed(profile):
+        return unk[0], profile
+    else:
+        for p in pens:
+            q = profile.rstrip(p) if profile.endswith(p) else profile
+            if stemmed(q):
+                return unk[0], q
+    sys.stderr.write("Alignment profiles not found: %s\n" % profile)
+    sys.exit()
 
 def enumerate_parts(filename, splits, strict=True):
     if '.' in filename.split('/')[-1]:
@@ -125,7 +140,10 @@ def catfile_temporary(newfile, parts):
     for f in parts:
         os.remove(f)
 
-# # check if presplit, split if not
+# check inputs
+input_fasta, profile = _checks()
+
+# check if presplit, split if not
 if not check_presplit(input_fasta, n_split):
     subprocess.call(('%s %s --n-parts %s' % (cmd_fastasplit, input_fasta, n_split)).split())
 
@@ -176,10 +194,9 @@ for file in tempfiles:
 
     w = open(newfile, 'w')
     with open(file) as r:
-        header1 = next(r).split('){') #changed to next() instead of .next for python 3
+        header1 = next(r).split('){') # changed to next() instead of .next for python 3
         w.write('('.join(header1[0].split('(')[:-1])+'('+str(count)+'){'+header1[1])
         w.write(next(r)+'\n')
-
         for l in r:
             if l[0]=='$':
                 if l[:3]=='$1=' and skip_dollar_one:
@@ -188,7 +205,6 @@ for file in tempfiles:
                 w.write(next(r))
                 w.write(next(r))
                 w.write(next(r))
-
     w.write('_0].')
     w.close()
     os.remove(file)

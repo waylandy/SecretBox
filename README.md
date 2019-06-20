@@ -7,18 +7,21 @@
 
 # Description:
 ---
-This is a collection of scripts used by the Kannan Lab.
+This is a collection of bioinformatics scripts used by the Kannan Lab.
 There may be bugs, so use at your own risk.
 
 
 ### mapfaster
 ---
-parallelized wrapper for the mapgaps multiple sequence alignment program \
+Parallelized wrapper for the mapgaps multiple sequence alignment program \
 Tested working in Python 2 & 3
 
 
 ### wetwilly
 ---
-finds water contacts in pdb
-requires Bio.PDB
+Finds water contacts in pdb files using Bio.PDB
 
+
+### func_dump.py
+---
+A small collection of standalone python functions I found useful
