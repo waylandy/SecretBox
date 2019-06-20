@@ -1,5 +1,5 @@
 
-![logo](logo.png)
+![logo](ext/logo.png)
 
 &nbsp;
 
@@ -7,15 +7,15 @@
 
 # Description:
 ---
-This is a collection of scripts used by the Kannan Lab. There may be bugs, so use at your own risk.
+This is a collection of scripts used by the Kannan Lab.
+There may be bugs, so use at your own risk.
 
-### runfaster_gaps
+
+### mapfaster
 ---
-parallelized version of run_gaps \
-requires the following to be in your paths:
-* __run_gaps__ (Neuwald's program)
-* __fasta-splitter.pl__ (http://kirill-kryukov.com/study/tools/fasta-splitter/)
-* __parallel__ (GNU parallel)
+parallelized wrapper for the mapgaps multiple sequence alignment program \
+Tested working in Python 2 & 3
+
 
 ### wetwilly
 ---

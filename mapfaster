@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+import subprocess
+import os
+import argparse
+import sys
+
+revision = '190619' 
+description = """
+mapfaster [ revision %s ]
+Find future updates at github.com/waylandy/SecretBox
+
+Written by: 
+  Wayland Yeung
+Contributors:
+  Rahil Taujale   Aarya Venkat
+
+USAGE: mapfaster <input> -s <int> -t <int> -profile <str>
+                         -f <int> -n <float> -q <bool>
+
+Requires the following programs to be in your paths:
+  mapgaps           : igs.umaryland.edu/labs/neuwald/software/mapgaps/
+  fasta-splitter.pl : kirill-kryukov.com/study/tools/fasta-splitter/
+  gnu parallel      : gnu.org/software/parallel/
+
+""" % revision
+
+parser = argparse.ArgumentParser(description=description, usage=argparse.SUPPRESS, formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-s', type=int,   help="number of times to split the input ; default 1 " , default=1)
+parser.add_argument('-t', type=int,   help="number of threads                  ; default 1 " , default=1)
+parser.add_argument('-f', type=int,   help="length of flanking regions to keep ; default 10" , default=10)
+parser.add_argument('-n', type=float, help="sense                              ; default 0.9", default=0.9)
+parser.add_argument('-q', action='store_true',  help="split the input, then quit")
+# parser.add_argument('-c', action='store_true',  help="keep consensus sequence")
+# parser.add_argument('-d', action='store_false', help="delete intermediate files (always recommended)")
+parser.add_argument('-profile', default="/auto/Data/profiles/ePKf",
+                    help="run_gaps profile; default is ePKf (share drive)")
+
+args, unk = parser.parse_known_args()
+if len(unk) != 1:
+    sys.stderr.write("No input sequence file provided as input\n")
+    sys.exit()
+input_fasta = unk[0]
+
+n_split          = args.s
+n_threads        = args.t
+flanking         = args.f
+sense            = args.n
+splitnquit       = args.q
+# onecsq           = args.c
+# clean            = args.d
+profile          = args.profile
+
+cmd_rungaps    = "mapgaps"
+cmd_fastasplit = "fasta-splitter.pl"
+cmd_parallel   = "parallel"
+
+def enumerate_parts(filename, splits, strict=True):
+    if '.' in filename.split('/')[-1]:
+        left = '.'.join(filename.split('.')[:-1])
+        right = '.'+filename.split('.')[-1]
+    else:
+        left = filename
+        right = ''
+    pads = len(str(splits))
+    parts = list(map(lambda x: left+'.part-'+str(x).zfill(pads)+right, range(1, splits+1)))
+
+    if strict:
+        for p in parts:
+            assert os.path.isfile(p) 
+    return parts
+
+def solve_parts(filename, parts):
+    place = os.path.dirname(parts[0])
+    place = '.' if  place=='' else place
+    sys.stdout.write("TRYING TO LOOK AT FILES...\n\n")
+    allfiles = os.listdir(place)
+
+    sys.stdout.write("PREPARING TO CAT...\n\n")
+    suffixes = set(map(lambda x: '_'+x.split("_")[-1], allfiles))
+    suffixes = list(filter(lambda x: (x[-4:] in ['.cma','.seq','.mma']) and len(x) < 9, suffixes))
+    alldic = {}
+
+    for s in suffixes:
+        alldic[filename+s] = list(filter(lambda x: x.endswith(s) and '.part-' in x, allfiles))
+    return alldic
+
+def check_presplit(filename, splits):
+    if '.' in filename.split('/')[-1]:
+        left = '.'.join(filename.split('.')[:-1])+'.part-'
+        right = '.'+filename.split('.')[-1]
+    else:
+        left = filename+'.part-'
+        right = ''
+    place = os.path.dirname(filename)
+    place = '.' if  place=='' else place
+    allfiles = os.listdir(place)
+    partfiles = []
+    for x in allfiles:
+        if x.endswith(right) and x.startswith(left):
+            if x.rstrip(right).lstrip(left).isdigit():
+                partfiles += [x]
+    if set(partfiles) == set(enumerate_parts(filename, splits, strict=False)):
+        return True
+    else:
+        for p in partfiles:
+            os.remove(p)
+        return False
+
+def catfile_temporary(newfile, parts):
+    sys.stdout.write("CAT      :  %s" % newfile+'._temp' + "\n")
+    ra = [open(p, 'r') for p in parts]
+    with open(newfile+'._temp', 'w') as w:
+        for r in ra:
+            for l in r:
+                w.write(l)
+    for r in ra:
+        r.close()
+    sys.stdout.write("REMOVING :  %s" % '\n            '.join(parts) + "\n")
+    for f in parts:
+        os.remove(f)
+
+# # check if presplit, split if not
+if not check_presplit(input_fasta, n_split):
+    subprocess.call(('%s %s --n-parts %s' % (cmd_fastasplit, input_fasta, n_split)).split())
+
+if splitnquit:
+    sys.exit(0)
+
+parts = enumerate_parts(input_fasta, n_split)
+
+# write all commands
+with open(input_fasta+'.cmd.temp', 'w') as w:
+    for p in parts:
+        w.write('%s %s %s -O -I=%s:%s -sense=%s\n' % (cmd_rungaps, profile, p, flanking, flanking, sense))
+
+# parallel run the commands
+with open(input_fasta+'.rgp.cmd', 'w') as w:
+    w.write('parallel -u -j %s < %s' % (n_threads, input_fasta+'.cmd.temp'))
+subprocess.call(["bash", input_fasta+'.rgp.cmd'])
+os.remove(input_fasta+'.rgp.cmd')
+os.remove(input_fasta+'.cmd.temp')
+alldic = solve_parts(input_fasta, parts)
+
+# cat the parted files
+for k in alldic:
+    catfile_temporary(k, alldic[k])
+
+# reform the temporary files
+place = os.path.dirname(input_fasta)
+place = '.' if  place=='' else place
+tempfiles = list(filter(lambda x: x.endswith('._temp'), os.listdir(place)))
+for file in tempfiles:
+    newfile = file.rstrip('._temp')
+    sys.stdout.write('REFORMING:  %s' % newfile + "\n")
+    if newfile.endswith('.seq'):
+        os.rename(file,newfile)
+        continue
+    if newfile.endswith('_A.mma') or newfile.endswith('_aln.cma'):
+        skip_dollar_one = False
+    elif newfile.endswith('.cma'):
+        skip_dollar_one = True
+    # figure out number of seqences
+    count = 0
+    with open(file) as r:
+        for l in r:
+            if l[0]=='$':
+                if l[:3]=='$1=' and skip_dollar_one:
+                    continue
+                count += 1
+
+    w = open(newfile, 'w')
+    with open(file) as r:
+        header1 = next(r).split('){') #changed to next() instead of .next for python 3
+        w.write('('.join(header1[0].split('(')[:-1])+'('+str(count)+'){'+header1[1])
+        w.write(next(r)+'\n')
+
+        for l in r:
+            if l[0]=='$':
+                if l[:3]=='$1=' and skip_dollar_one:
+                    continue
+                w.write(l)
+                w.write(next(r))
+                w.write(next(r))
+                w.write(next(r))
+
+    w.write('_0].')
+    w.close()
+    os.remove(file)
+
+for p in parts:
+    os.remove(p)
