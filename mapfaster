@@ -4,12 +4,13 @@ import os
 import argparse
 import sys
 
-revision = '190619' 
+revision = '190620-AV'
+
 description = """
 mapfaster [ revision %s ]
 Find future updates at github.com/waylandy/SecretBox
 
-Written by: 
+Written by:
   Wayland Yeung
 Contributors:
   Rahil Taujale   Aarya Venkat
@@ -36,8 +37,13 @@ parser.add_argument('-profile', default="/auto/Data/profiles/ePKf",
                     help="run_gaps profile; default is ePKf (share drive)")
 
 args, unk = parser.parse_known_args()
-if len(unk) != 1:
-    sys.stderr.write("No input sequence file provided as input\n")
+if len(unk) == 0:
+    sys.stderr.write("No input sequence file found.\n")
+    sys.stderr.write("\nCheck the help section with [ mapfaster -h ].\n")
+    sys.exit()
+elif len(unk) > 1:
+    sys.stderr.write("Please provide only a single sequence file or check if flags are included correctly.\n")
+    sys.stderr.write("\nCheck the help section with [ mapfaster -h ].\n")
     sys.exit()
 input_fasta = unk[0]
 
@@ -66,7 +72,7 @@ def enumerate_parts(filename, splits, strict=True):
 
     if strict:
         for p in parts:
-            assert os.path.isfile(p) 
+            assert os.path.isfile(p)
     return parts
 
 def solve_parts(filename, parts):
