@@ -4,7 +4,7 @@ import os
 import argparse
 import sys
 
-revision = '190620-AV-WY'
+revision = '191020'
 
 description = """
 mapfaster [ revision %s ]
@@ -16,7 +16,7 @@ Contributors:
   Rahil Taujale   Aarya Venkat
 
 USAGE: mapfaster <input> -s <int> -t <int> -profile <str>
-                         -f <int> -n <float> -q <bool>
+                         -f <int> -n <float> -q <bool> -c <bool>
 
 Requires the following programs to be in your paths:
   gnu parallel      : gnu.org/software/parallel/
@@ -26,13 +26,12 @@ Requires the following programs to be in your paths:
 parser = argparse.ArgumentParser(description=description, usage=argparse.SUPPRESS, formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-s', type=int,   help="number of times to split the input ; default 1 " , default=1)
 parser.add_argument('-t', type=int,   help="number of threads                  ; default 1 " , default=1)
-parser.add_argument('-f', type=int,   help="length of flanking regions to keep ; default 10" , default=10)
+parser.add_argument('-f', type=int,   help="length of flanking regions to keep ; default 999999999" , default=999999999)
 parser.add_argument('-n', type=float, help="sense                              ; default 0.9", default=0.9)
 parser.add_argument('-q', action='store_true',  help="split the input, then quit")
-# parser.add_argument('-c', action='store_true',  help="keep consensus sequence")
-# parser.add_argument('-d', action='store_false', help="delete intermediate files (always recommended)")
+parser.add_argument('-c', action='store_true',  help="classic output")
 parser.add_argument('-profile', default="/auto/Data/profiles/ePKf",
-                    help="run_gaps profile; default is ePKf (share drive)")
+                    help="run_gaps profile")
 
 args, unk = parser.parse_known_args()
 
@@ -41,8 +40,7 @@ n_threads        = args.t
 flanking         = args.f
 sense            = args.n
 splitnquit       = args.q
-# onecsq           = args.c
-# clean            = args.d
+classic          = args.c
 profile          = args.profile
 
 here = os.path.dirname(os.path.realpath(__file__))
@@ -52,7 +50,7 @@ cmd_parallel   = "parallel"
 
 def _checks():
     lu = len(unk)
-    pens = ['.cma','.dft','.tpl','.mpa']
+    pens = ['.dft','.tpl','.mpa']
     if lu == 0:
         sys.stderr.write("No input sequence file provided\n")
         sys.stderr.write('Check usage: "mapfaster -h"\n')
@@ -211,3 +209,90 @@ for file in tempfiles:
 
 for p in parts:
     os.remove(p)
+
+class IterCMA:
+    """
+    An iterator to read CMA files.
+    returns (seqnumber, seqname, seqcma)
+
+    _name    : name of alignment file
+    _aln     : alignment length
+    _cmafile : the file you're iterating
+    len      : number of sequences
+    """
+    def __init__(self, cmafile, flank=True):
+        self._flank = flank
+        self._cmafile = cmafile
+        self._r = open(self._cmafile)
+        name = self._r.next()
+        self._name = name.split('=')[1].split('(')[0]
+        self._aln  = self._r.next().count('*')
+        self.len   = self._len()
+
+    def __str__(self):
+        return self._name
+
+    def __repr__(self):
+        return '<CMA file "%s" containing %s sequences>' % (self, self.len)
+
+    def __len__(self):
+        return self.len
+
+    def __iter__(self):
+        self._r = open(self._cmafile)
+        return self
+
+    def _len(self):
+        with open(self._cmafile) as _r:
+            return sum(1 for l in _r if l[0]=='$')
+
+    def _excise(self, s, border=')('):
+        b1, b2 = border
+        b1s, b2s = True, True
+        l, p = ['','',''], 0
+        for e in s:
+            if e==b1 and b1s:
+                b1s = False
+                p+=1
+                continue
+            elif e==b2 and b2s and not b1s:
+                b2s = False
+                p+=1
+                continue
+            l[p]+=e
+        l = map(lambda x: ''.join(filter(lambda y: y not in '{\n})(*', x)), l)
+        if self._flank:
+            l[0] = l[0].lower()
+            l[2] = l[2].lower()
+            return l
+        else:
+            return ['',l[1],'']
+
+    def _restore(self, name):
+        n = name.find(')|}')
+        if n==-1:
+            return name, ''
+        adi = name[name[:n+3].find('{|'):n+3]
+        return name.replace(adi, '').strip(), adi
+
+    def next(self):
+        while True:
+            l = self._r.next()
+            if l[0]=='$':
+                seqnumber = l[:-2]
+            elif l[0]=='>':
+                seqname = self._restore(l[1:].strip())
+            elif '{(' in l:
+                seqcma = self._excise(l)
+                return seqnumber, seqname, seqcma
+
+if not classic:
+    with open(input_fasta+'.cfa', 'w') as w:
+        for f in alldic:
+            if f[-4:] == '.seq':
+                os.remove(f)
+            elif f[-4:] == '.cma':
+                itc = IterCMA(f)
+                for num, name, cma in itc:
+                    w.write('>%s profile:%s\n%s\n\n' % (name[0], itc._name, ''.join(cma)))
+                os.remove(f)
