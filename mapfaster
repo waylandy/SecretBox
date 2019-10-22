@@ -4,7 +4,7 @@ import os
 import argparse
 import sys
 
-revision = '191020'
+revision = '191022'
 
 description = """
 mapfaster [ revision %s ]
